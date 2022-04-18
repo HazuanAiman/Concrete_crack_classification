@@ -16,7 +16,7 @@ data_dir = pathlib.Path(file_path)
 
 #%%
 SEED = 12345
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 IMG_SIZE = (224, 224)
 
 train_dataset = tf.keras.utils.image_dataset_from_directory(data_dir, validation_split=0.3, subset='training', seed=SEED, batch_size=BATCH_SIZE, image_size=IMG_SIZE)
@@ -67,14 +67,14 @@ base_model.summary()
 #Add classification layer using global average pooling
 global_avg_pool = tf.keras.layers.GlobalAveragePooling2D()
 class_names = train_dataset.class_names
-output_dense = tf.keras.layers.Dense(len(class_names), activation='softmax') #when using softmax, logits in loss compiler must be set to False
+output_dense = tf.keras.layers.Dense(len(class_names), activation='softmax')
 
 #%%
 #Use functional API to create the entire model (input pipeline + NN)
 inputs = tf.keras.Input(shape=IMG_SHAPE)
 x = data_augmentation(inputs)
 x = preprocess_input(x)
-x = base_model(x, training=False)
+x = base_model(x)
 x = global_avg_pool(x)
 outputs = output_dense(x)
 
@@ -93,28 +93,8 @@ EPOCHS = 10
 import datetime
 log_path = r'X:\Users\User\Tensorflow Deep Learning\Tensorboard\concretecrack_' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") 
 tb_callback = tf.keras.callbacks.TensorBoard(log_dir=log_path)
-history = model.fit(train_dataset_pf, validation_data=validation_dataset_pf, epochs=EPOCHS, callbacks=[tb_callback])
-
-#%%
-#Now perform fine tuning, the goal is to train the higher level convolution layers. This is to allow high level features to be adapted to our own dataset
-#1. Unfreeze base_model
-base_model.trainable = True
-
-#2. Freeze first n number of layers (leave the behind layers to be unfrozen so that they will be trained)
-fine_tune_at = 100
-for layer in base_model.layers[:fine_tune_at]:
-    layer.trainable = False
-
-rmsprop = tf.keras.optimizers.RMSprop(learning_rate=0.00001)        
-model.compile(optimizer=rmsprop, loss=loss, metrics=['accuracy'])
-model.summary()
-
-#%%
-fine_tune_epoch = 10
-total_epoch = EPOCHS + fine_tune_epoch
-
-#Continue from previous checkpoint
-history_fine = model.fit(train_dataset_pf, validation_data=validation_dataset_pf, epochs=total_epoch,initial_epoch=history.epoch[-1], callbacks=[tb_callback])
+es_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',patience=5,verbose=1)
+history = model.fit(train_dataset_pf, validation_data=validation_dataset_pf, epochs=EPOCHS, callbacks=[tb_callback, es_callback])
 
 #%%
 #Evaluate with test dataset
